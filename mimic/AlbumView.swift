@@ -6,3 +6,9 @@
 //
 
 import Foundation
+import SwiftUI
+
+struct AlbumView: View {
+    var body: some View {
+    }
+}

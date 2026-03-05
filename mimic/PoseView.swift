@@ -6,3 +6,9 @@
 //
 
 import Foundation
+import SwiftUI
+
+struct PoseView: View {
+    var body: some View {
+    }
+}
