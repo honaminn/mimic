@@ -123,29 +123,22 @@ struct SettingView: View {
                         }
                         .padding(.horizontal, 25)
 
-                        NavigationLink {
-                            ShootingMainView()
-                        } label: {
-                            HStack {
-                                Image(systemName: "camera")
-                                Text("カメラを起動")
-                            }
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.blue)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                        .padding(.horizontal, 25)
                     }
                     .frame(minHeight: geometry.size.height, alignment: .top)
-                    .padding(.top, 68)
+                    .padding(.top, 20)
                     .padding(20)
                 }
             }
             .navigationTitle("設定")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink("スタート") {
+                        ShootingStartView(selectedTags: selectedTags, totalShots: Int(sliderValue))
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
             .background(Color(red: 1.0, green: 0.95, blue: 0.88))
         }
     } // body の終わり
