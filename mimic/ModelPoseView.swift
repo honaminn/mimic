@@ -19,6 +19,8 @@ struct ModelPoseView: View {
     @State private var navigateToShootingMain = false
     @State private var countdownStartDate: Date?
     @State private var isCountingDown = false
+    @AppStorage("mimic.popToRoot") private var popToRoot = false
+    @Environment(\.dismiss) private var dismiss
 
     private let totalDuration: TimeInterval = 3.0
     private let countdownTimer = Timer.publish(every: 0.03, on: .main, in: .common).autoconnect()
@@ -87,6 +89,10 @@ struct ModelPoseView: View {
                 isCountingDown = false
                 navigateToShootingMain = true
             }
+        }
+        .onChange(of: popToRoot) { _, value in
+            guard value else { return }
+            dismiss()
         }
     }
 }

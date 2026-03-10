@@ -17,6 +17,8 @@ struct ShootingShowView: View {
 
     @State private var navigateToNextPose = false
     @State private var navigateToResult = false
+    @AppStorage("mimic.popToRoot") private var popToRoot = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack {
@@ -31,15 +33,12 @@ struct ShootingShowView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .padding(.horizontal, 20)
 
-                Text("撮影完了")
+                Text("こんなふうに撮れたよ！")
                     .font(.title3)
                     .fontWeight(.bold)
                     .foregroundStyle(.white)
+                    .padding(.bottom, 44)
 
-                Text("次のポーズに移動します")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.8))
-                    .padding(.bottom, 20)
             }
         }
         .toolbar(.hidden, for: .tabBar)
@@ -65,6 +64,10 @@ struct ShootingShowView: View {
                     navigateToResult = true
                 }
             }
+        }
+        .onChange(of: popToRoot) { _, value in
+            guard value else { return }
+            dismiss()
         }
     }
 }

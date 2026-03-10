@@ -19,6 +19,7 @@ struct ShootingMainView: View {
     @State private var countdownValue: Int?
     @State private var navigateToShootingShow = false
     @State private var latestCapturedImageForShow: UIImage?
+    @AppStorage("mimic.popToRoot") private var popToRoot = false
     @Environment(\.dismiss) private var dismiss
     private let autoCaptureDelay: TimeInterval = 10.0
     private let autoCaptureTicker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
@@ -90,6 +91,9 @@ struct ShootingMainView: View {
             }
         }
         .onAppear {
+            if currentShot == 1 {
+                SessionPhotoStore.startNewSession()
+            }
             camera.start()
             scheduleAutoCaptureIfNeeded()
         }
@@ -118,6 +122,10 @@ struct ShootingMainView: View {
             saveImageToAppStorage(image)
             latestCapturedImageForShow = image
             navigateToShootingShow = true
+        }
+        .onChange(of: popToRoot) { _, value in
+            guard value else { return }
+            dismiss()
         }
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .tabBar)
@@ -256,6 +264,7 @@ struct ShootingMainView: View {
             let filename = "mimic_\(UUID().uuidString).jpg"
             let url = folder.appendingPathComponent(filename)
             try data.write(to: url, options: .atomic)
+            SessionPhotoStore.appendPhoto(url)
         } catch {
             camera.errorMessage = "アプリ内保存に失敗しました"
         }
@@ -308,6 +317,12 @@ final class CameraSessionModel: ObservableObject {
             guard self.isConfigured, self.session.isRunning else { return }
             let settings = AVCapturePhotoSettings()
             settings.flashMode = .off
+            if let connection = self.photoOutput.connection(with: .video) {
+                if connection.isVideoRotationAngleSupported(90) {
+                    connection.videoRotationAngle = 90
+                }
+                connection.isVideoMirrored = false
+            }
             self.photoOutput.capturePhoto(with: settings, delegate: self.photoCaptureDelegate)
         }
     }
@@ -373,7 +388,7 @@ final class CameraSessionModel: ObservableObject {
                 .builtInTelephotoCamera
             ],
             mediaType: .video,
-            position: .back
+            position: .front
         )
 
         guard let device = discovery.devices.first ?? AVCaptureDevice.default(for: .video) else {
@@ -416,7 +431,23 @@ final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
             completion(nil)
             return
         }
-        completion(image)
+        Task { @MainActor in
+            completion(image.normalizedOrientation())
+        }
+    }
+}
+
+private extension UIImage {
+    @MainActor
+    func normalizedOrientation() -> UIImage {
+        if imageOrientation == .up {
+            return self
+        }
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        draw(in: CGRect(origin: .zero, size: size))
+        let normalized = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        return normalized ?? self
     }
 }
 
