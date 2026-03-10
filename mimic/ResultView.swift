@@ -6,7 +6,8 @@ struct ResultView: View {
     @State private var sharePayload: SharePayload?
     @State private var shareErrorMessage: String?
     @State private var currentIndex = 0
-    @AppStorage("mimic.popToRoot") private var popToRoot = false
+    @State private var sessionPhotoURLs: [URL] = []
+    @State private var isClosing = false
     @Environment(\.dismiss) private var dismiss
 
     init(totalShots: Int = 0) {
@@ -27,8 +28,10 @@ struct ResultView: View {
                             .frame(width: 44, height: 44)
                             .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
                         Button {
-                            popToRoot = true
-                            dismiss()
+                            isClosing = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                                NotificationCenter.default.post(name: .mimicPopToRoot, object: nil)
+                            }
                         } label: {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 20, weight: .bold))
@@ -37,10 +40,10 @@ struct ResultView: View {
                     }
                 }
                 .padding(.horizontal, 22)
-                .padding(.top, 26)
+                .padding(.top, 12)
 
                 let photoSize = CGSize(width: 320, height: 480)
-                if photoURLs.isEmpty {
+                if sessionPhotoURLs.isEmpty {
                     RoundedRectangle(cornerRadius: 14)
                         .fill(Color.black.opacity(0.12))
                         .frame(width: photoSize.width, height: photoSize.height)
@@ -50,7 +53,7 @@ struct ResultView: View {
                         )
                 } else {
                     TabView(selection: $currentIndex) {
-                        ForEach(Array(photoURLs.enumerated()), id: \.offset) { index, url in
+                        ForEach(Array(sessionPhotoURLs.enumerated()), id: \.offset) { index, url in
                             ZStack {
                                 if let image = UIImage(contentsOfFile: url.path) {
                                     Image(uiImage: image)
@@ -74,7 +77,7 @@ struct ResultView: View {
                 }
 
                 HStack(spacing: 10) {
-                    let count = max(photoURLs.count, 1)
+                    let count = max(sessionPhotoURLs.count, 1)
                     ForEach(0..<count, id: \.self) { index in
                         Circle()
                             .fill(index == currentIndex ? .black.opacity(0.85) : .black.opacity(0.2))
@@ -102,7 +105,19 @@ struct ResultView: View {
                 .padding(.bottom, 26)
             }
         }
+        .overlay {
+            Color.white
+                .ignoresSafeArea()
+                .opacity(isClosing ? 1 : 0)
+                .animation(.easeOut(duration: 0.12), value: isClosing)
+        }
         .toolbar(.hidden, for: .tabBar)
+        .onAppear {
+            reloadSessionPhotos()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
+            dismiss()
+        }
         .sheet(item: $sharePayload) { payload in
             ActivityView(activityItems: payload.items)
         }
@@ -115,20 +130,30 @@ struct ResultView: View {
         }
     }
 
-    private var photoURLs: [URL] {
-        SessionPhotoStore.loadPhotos()
+    private func reloadSessionPhotos() {
+        let stored = SessionPhotoStore.loadPhotos()
+        if totalShots > 0, stored.count < totalShots {
+            sessionPhotoURLs = SessionPhotoStore.loadMostRecent(limit: totalShots)
+        } else {
+            sessionPhotoURLs = stored
+        }
+        currentIndex = min(currentIndex, max(sessionPhotoURLs.count - 1, 0))
     }
 
     private func shareItemForCurrentIndex() -> Any? {
-        guard !photoURLs.isEmpty else { return nil }
-        let index = min(max(currentIndex, 0), photoURLs.count - 1)
-        let url = photoURLs[index]
+        guard !sessionPhotoURLs.isEmpty else { return nil }
+        let index = min(max(currentIndex, 0), sessionPhotoURLs.count - 1)
+        let url = sessionPhotoURLs[index]
         if let image = UIImage(contentsOfFile: url.path) {
             return image
         }
         return url
     }
 
+}
+
+extension Notification.Name {
+    static let mimicPopToRoot = Notification.Name("mimic.popToRoot")
 }
 
 struct SharePayload: Identifiable {

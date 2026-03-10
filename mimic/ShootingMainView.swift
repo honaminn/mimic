@@ -3,6 +3,7 @@ import AVFoundation
 import Combine
 import UIKit
 import Photos
+import Vision
 
 struct ShootingMainView: View {
     let selectedTags: Set<String>
@@ -19,7 +20,8 @@ struct ShootingMainView: View {
     @State private var countdownValue: Int?
     @State private var navigateToShootingShow = false
     @State private var latestCapturedImageForShow: UIImage?
-    @AppStorage("mimic.popToRoot") private var popToRoot = false
+    @State private var showExitAlert = false
+    @State private var poseScore: Double?
     @Environment(\.dismiss) private var dismiss
     private let autoCaptureDelay: TimeInterval = 10.0
     private let autoCaptureTicker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
@@ -123,8 +125,18 @@ struct ShootingMainView: View {
             latestCapturedImageForShow = image
             navigateToShootingShow = true
         }
-        .onChange(of: popToRoot) { _, value in
-            guard value else { return }
+        .onReceive(camera.$currentPoseAngles) { angles in
+            guard let angles else {
+                poseScore = nil
+                return
+            }
+            if let reference = PoseReferenceStore.angles(for: referencePose.name) {
+                poseScore = PoseAngleScorer.score(current: angles, reference: reference)
+            } else {
+                poseScore = nil
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
             dismiss()
         }
         .navigationBarBackButtonHidden(true)
@@ -143,11 +155,16 @@ struct ShootingMainView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    dismiss()
+                    showExitAlert = true
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.black)
+                    ZStack {
+                        Circle()
+                            .fill(.white.opacity(0.9))
+                            .frame(width: 56, height: 56)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(.black)
+                    }
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -160,6 +177,12 @@ struct ShootingMainView: View {
                         .foregroundStyle(.black)
                 }
             }
+        }
+        .alert("撮影をやめる？", isPresented: $showExitAlert) {
+            Button("やめる", role: .destructive) {
+                NotificationCenter.default.post(name: .mimicPopToRoot, object: nil)
+            }
+            Button("キャンセル", role: .cancel) {}
         }
     }
 
@@ -198,12 +221,18 @@ struct ShootingMainView: View {
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.brown)
                     HStack(alignment: .lastTextBaseline, spacing: 2) {
-                        Text("55")
-                            .font(.system(size: 72, weight: .black, design: .rounded))
-                            .foregroundStyle(Color.orange)
-                        Text("%")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(.brown)
+                        if let poseScore {
+                            Text("\(Int(poseScore.rounded()))")
+                                .font(.system(size: 72, weight: .black, design: .rounded))
+                                .foregroundStyle(Color.orange)
+                            Text("%")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(.brown)
+                        } else {
+                            Text("--")
+                                .font(.system(size: 64, weight: .black, design: .rounded))
+                                .foregroundStyle(Color.orange)
+                        }
                     }
                 }
             }
@@ -282,16 +311,22 @@ enum AppPhotoStore {
     }
 }
 
-final class CameraSessionModel: ObservableObject {
+final class CameraSessionModel: NSObject, ObservableObject {
     let session = AVCaptureSession()
 
     @Published var permissionDenied = false
     @Published var errorMessage: String?
     @Published var capturedImage: UIImage?
+    @Published @MainActor var currentPoseAngles: PoseAngles?
 
     private let queue = DispatchQueue(label: "camera.session.queue")
+    private let visionQueue = DispatchQueue(label: "camera.vision.queue")
     private var isConfigured = false
     private let photoOutput = AVCapturePhotoOutput()
+    private let videoOutput = AVCaptureVideoDataOutput()
+    private let poseStateQueue = DispatchQueue(label: "camera.pose.state.queue")
+    nonisolated(unsafe) private var lastPoseTimestamp: CFTimeInterval = 0
+    nonisolated(unsafe) private let poseRequest = VNDetectHumanBodyPoseRequest()
     private lazy var photoCaptureDelegate = PhotoCaptureDelegate { [weak self] image in
         DispatchQueue.main.async {
             self?.capturedImage = image
@@ -299,6 +334,10 @@ final class CameraSessionModel: ObservableObject {
                 self?.errorMessage = "撮影に失敗しました"
             }
         }
+    }
+
+    override init() {
+        super.init()
     }
 
     func start() {
@@ -416,6 +455,45 @@ final class CameraSessionModel: ObservableObject {
             return
         }
         session.addOutput(photoOutput)
+
+        if session.canAddOutput(videoOutput) {
+            videoOutput.alwaysDiscardsLateVideoFrames = true
+            videoOutput.setSampleBufferDelegate(self, queue: visionQueue)
+            session.addOutput(videoOutput)
+        }
+    }
+}
+
+extension CameraSessionModel: AVCaptureVideoDataOutputSampleBufferDelegate {
+    nonisolated func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let timestamp = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+        let shouldProcess = poseStateQueue.sync { () -> Bool in
+            if timestamp - lastPoseTimestamp < 0.1 {
+                return false
+            }
+            lastPoseTimestamp = timestamp
+            return true
+        }
+        guard shouldProcess else { return }
+
+        let handler = VNImageRequestHandler(cmSampleBuffer: sampleBuffer, orientation: .rightMirrored, options: [:])
+        do {
+            try handler.perform([poseRequest])
+            guard let observation = poseRequest.results?.first else {
+                Task { @MainActor in
+                    self.currentPoseAngles = nil
+                }
+                return
+            }
+            let angles = PoseAngleScorer.angles(from: observation)
+            Task { @MainActor in
+                self.currentPoseAngles = angles
+            }
+        } catch {
+            Task { @MainActor in
+                self.currentPoseAngles = nil
+            }
+        }
     }
 }
 

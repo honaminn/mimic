@@ -6,140 +6,163 @@ struct SettingView: View {
     @State var sliderValue: Double = 5.0
     @State var people = 1
     @State private var isOn = false
+    @State private var showShootingFlow = false
     // ここで複数選択したタグを保存します
     @State private var selectedTags: Set<String> = []
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { geometry in
-                ScrollView {
-                    let sectionGap = max(20, geometry.size.height * 0.06)
+        ZStack {
+            NavigationStack {
+                GeometryReader { geometry in
+                    ScrollView {
+                        let sectionGap = max(20, geometry.size.height * 0.06)
 
-                    VStack(spacing: 30) {
-                        // 枚数設定
-                        HStack(alignment: .center, spacing: 20) {
-                            VStack {
-                                Image(systemName: "camera.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 80, height: 80)
-                                    .foregroundStyle(.tint)
-                                Text("何枚撮る？")
-                            }
-                            .padding(.horizontal, 25)
-
-                            VStack(spacing: 8) {
-                                Slider(
-                                    value: $sliderValue,
-                                    in: 4...10,
-                                    step: 1,
-                                    minimumValueLabel: Text("4"),
-                                    maximumValueLabel: Text("10")
-                                ) {
-                                    Text("枚数")
-                                }
-
-                                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                    Text("\(Int(sliderValue))")
-                                        .font(.system(size: 34, weight: .bold))
-                                    Text("枚")
-                                        .font(.subheadline)
-                                }
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-
-                        Color.clear.frame(height: sectionGap)
-
-                        // 人数設定
-                        HStack {
-                            VStack {
-                                Image(systemName: "person.3.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 80, height: 80)
-                                    .foregroundStyle(.tint)
-                                Text("何人で撮る？")
-                            }
-                            .padding(.horizontal, 25)
-
-                            Spacer()
-
-                            HStack {
-                                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                    Text("\(people)")
-                                        .font(.system(size: 34, weight: .bold))
-                                    Text("人")
-                                        .font(.subheadline)
-                                }
-
-                                Stepper(
-                                    "",
-                                    value: $people,
-                                    in: 1...6
-                                )
-                                .labelsHidden()
-                            }
-                        }
-
-                        Color.clear.frame(height: sectionGap)
-
-                        // ポーズ設定
-                        HStack(alignment: .top, spacing: 15) {
-                            VStack {
-                                Image(systemName: "person.crop.rectangle.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 80, height: 80)
-                                    .foregroundStyle(.tint)
-                                Text("ポーズは？")
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .leading, spacing: 10) {
-                                Toggle(isOn: $isOn) {
-                                    Text("オリジナルポーズ")
-                                        .font(.body)
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.85)
-                                }
-                                .toggleStyle(.switch)
-
-                                Text("カテゴリ")
-                                    .font(.body)
-
+                        VStack(spacing: 30) {
+                            // 枚数設定
+                            HStack(alignment: .center, spacing: 20) {
                                 VStack {
-                                    HStack {
-                                        // ここで下の関数を呼び出しています
-                                        poseChip(title: "cute")
-                                        poseChip(title: "cool")
+                                    Image(systemName: "camera.fill")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 80, height: 80)
+                                        .foregroundStyle(.tint)
+                                    Text("何枚撮る？")
+                                }
+                                .padding(.horizontal, 25)
+
+                                VStack(spacing: 8) {
+                                    Slider(
+                                        value: $sliderValue,
+                                        in: 4...10,
+                                        step: 1,
+                                        minimumValueLabel: Text("4"),
+                                        maximumValueLabel: Text("10")
+                                    ) {
+                                        Text("枚数")
                                     }
-                                    HStack {
-                                        poseChip(title: "funny")
+
+                                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                        Text("\(Int(sliderValue))")
+                                            .font(.system(size: 34, weight: .bold))
+                                        Text("枚")
+                                            .font(.subheadline)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+
+                            Color.clear.frame(height: sectionGap)
+
+                            // 人数設定
+                            HStack {
+                                VStack {
+                                    Image(systemName: "person.3.fill")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 80, height: 80)
+                                        .foregroundStyle(.tint)
+                                    Text("何人で撮る？")
+                                }
+                                .padding(.horizontal, 25)
+
+                                Spacer()
+
+                                HStack {
+                                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                        Text("\(people)")
+                                            .font(.system(size: 34, weight: .bold))
+                                        Text("人")
+                                            .font(.subheadline)
+                                    }
+
+                                    Stepper(
+                                        "",
+                                        value: $people,
+                                        in: 1...6
+                                    )
+                                    .labelsHidden()
+                                }
+                            }
+
+                            Color.clear.frame(height: sectionGap)
+
+                            // ポーズ設定
+                            HStack(alignment: .top, spacing: 15) {
+                                VStack {
+                                    Image(systemName: "person.crop.rectangle.fill")
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 80, height: 80)
+                                        .foregroundStyle(.tint)
+                                    Text("ポーズは？")
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Toggle(isOn: $isOn) {
+                                        Text("オリジナルポーズ")
+                                            .font(.body)
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.85)
+                                    }
+                                    .toggleStyle(.switch)
+
+                                    Text("カテゴリ")
+                                        .font(.body)
+
+                                    VStack {
+                                        HStack {
+                                            // ここで下の関数を呼び出しています
+                                            poseChip(title: "cute")
+                                            poseChip(title: "cool")
+                                        }
+                                        HStack {
+                                            poseChip(title: "funny")
+                                        }
                                     }
                                 }
                             }
-                        }
-                        .padding(.horizontal, 25)
+                            .padding(.horizontal, 25)
 
+                        }
+                        .frame(minHeight: geometry.size.height, alignment: .top)
+                        .padding(.top, 20)
+                        .padding(20)
                     }
-                    .frame(minHeight: geometry.size.height, alignment: .top)
-                    .padding(.top, 20)
-                    .padding(20)
                 }
-            }
-            .navigationTitle("設定")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink("スタート") {
-                        ShootingStartView(selectedTags: selectedTags, totalShots: Int(sliderValue))
+                .navigationTitle("設定")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("スタート") {
+                            var transaction = Transaction()
+                            transaction.animation = nil
+                            withTransaction(transaction) {
+                                showShootingFlow = true
+                            }
+                        }
+                        .fontWeight(.semibold)
                     }
-                    .fontWeight(.semibold)
                 }
+                .background(Color(red: 1.0, green: 0.95, blue: 0.88))
             }
-            .background(Color(red: 1.0, green: 0.95, blue: 0.88))
+            .allowsHitTesting(!showShootingFlow)
+
+            if showShootingFlow {
+                NavigationStack {
+                    ShootingStartView(selectedTags: selectedTags, totalShots: Int(sliderValue))
+                }
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
+            var transaction = Transaction()
+            transaction.animation = nil
+            withTransaction(transaction) {
+                showShootingFlow = false
+            }
         }
     } // body の終わり
 

@@ -19,7 +19,6 @@ struct ModelPoseView: View {
     @State private var navigateToShootingMain = false
     @State private var countdownStartDate: Date?
     @State private var isCountingDown = false
-    @AppStorage("mimic.popToRoot") private var popToRoot = false
     @Environment(\.dismiss) private var dismiss
 
     private let totalDuration: TimeInterval = 3.0
@@ -64,6 +63,7 @@ struct ModelPoseView: View {
         .background(Color(red: 1.0, green: 0.95, blue: 0.88))
         .navigationTitle("モデルポーズ")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .tabBar)
         .navigationDestination(isPresented: $navigateToShootingMain) {
             ShootingMainView(
@@ -90,8 +90,7 @@ struct ModelPoseView: View {
                 navigateToShootingMain = true
             }
         }
-        .onChange(of: popToRoot) { _, value in
-            guard value else { return }
+        .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
             dismiss()
         }
     }

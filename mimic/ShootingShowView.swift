@@ -17,7 +17,6 @@ struct ShootingShowView: View {
 
     @State private var navigateToNextPose = false
     @State private var navigateToResult = false
-    @AppStorage("mimic.popToRoot") private var popToRoot = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -65,8 +64,7 @@ struct ShootingShowView: View {
                 }
             }
         }
-        .onChange(of: popToRoot) { _, value in
-            guard value else { return }
+        .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
             dismiss()
         }
     }

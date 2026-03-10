@@ -11,7 +11,6 @@ struct ShootingStartView: View {
     let selectedTags: Set<String>
     let totalShots: Int
     @State private var navigateToModelPose = false
-    @AppStorage("mimic.popToRoot") private var popToRoot = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -34,8 +33,7 @@ struct ShootingStartView: View {
                 navigateToModelPose = true
             }
         }
-        .onChange(of: popToRoot) { _, value in
-            guard value else { return }
+        .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
             dismiss()
         }
     }
