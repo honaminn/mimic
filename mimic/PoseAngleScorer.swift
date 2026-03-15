@@ -27,11 +27,12 @@ enum PoseAngleScorer {
 
         guard !diffs.isEmpty else { return 0 }
         let averageDiff = diffs.reduce(0, +) / Double(diffs.count)
-        let normalized = max(0, min(1, 1 - (averageDiff / 180.0)))
+        let maxAngleDiff = 120.0
+        let normalized = max(0, min(1, 1 - (averageDiff / maxAngleDiff)))
         return normalized * 100
     }
 
-    nonisolated static func angles(from observation: VNHumanBodyPoseObservation, minConfidence: VNConfidence = 0.3) -> PoseAngles? {
+    nonisolated static func angles(from observation: VNHumanBodyPoseObservation, minConfidence: VNConfidence = 0.1) -> PoseAngles? {
         guard let points = try? observation.recognizedPoints(.all) else { return nil }
 
         func point(_ key: VNHumanBodyPoseObservation.JointName) -> CGPoint? {

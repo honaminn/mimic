@@ -33,9 +33,9 @@ struct SettingView: View {
                                 VStack(spacing: 8) {
                                     Slider(
                                         value: $sliderValue,
-                                        in: 4...10,
+                                        in: 3...10,
                                         step: 1,
-                                        minimumValueLabel: Text("4"),
+                                        minimumValueLabel: Text("3"),
                                         maximumValueLabel: Text("10")
                                     ) {
                                         Text("枚数")
@@ -54,37 +54,7 @@ struct SettingView: View {
                             Color.clear.frame(height: sectionGap)
 
                             // 人数設定
-                            HStack {
-                                VStack {
-                                    Image(systemName: "person.3.fill")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 80, height: 80)
-                                        .foregroundStyle(.tint)
-                                    Text("何人で撮る？")
-                                }
-                                .padding(.horizontal, 25)
-
-                                Spacer()
-
-                                HStack {
-                                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                                        Text("\(people)")
-                                            .font(.system(size: 34, weight: .bold))
-                                        Text("人")
-                                            .font(.subheadline)
-                                    }
-
-                                    Stepper(
-                                        "",
-                                        value: $people,
-                                        in: 1...6
-                                    )
-                                    .labelsHidden()
-                                }
-                            }
-
-                            Color.clear.frame(height: sectionGap)
+                        
 
                             // ポーズ設定
                             HStack(alignment: .top, spacing: 15) {
@@ -100,13 +70,7 @@ struct SettingView: View {
                                 Spacer()
 
                                 VStack(alignment: .leading, spacing: 10) {
-                                    Toggle(isOn: $isOn) {
-                                        Text("オリジナルポーズ")
-                                            .font(.body)
-                                            .lineLimit(1)
-                                            .minimumScaleFactor(0.85)
-                                    }
-                                    .toggleStyle(.switch)
+                                  
 
                                     Text("カテゴリ")
                                         .font(.body)

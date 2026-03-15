@@ -11,7 +11,7 @@ import SwiftUI
 struct mimicApp: App {
     var body: some Scene {
         WindowGroup {
-            SettingView()
+            ContentView()
         }
     }
 }

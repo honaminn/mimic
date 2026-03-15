@@ -1,0 +1,152 @@
+#if canImport(AppKit)
+import Foundation
+import Vision
+import AppKit
+
+func usage() {
+    let text = """
+    Usage:
+      swift scripts/generate_pose_references.swift <images_folder> <output_json>
+
+    Notes:
+      - Each image filename (without extension) becomes the pose name key.
+      - Supported image formats: png, jpg, jpeg, heic (as supported by AppKit).
+    """
+    print(text)
+}
+
+func run() throws {
+    let args = CommandLine.arguments
+    if args.count < 3 {
+        usage()
+        exit(1)
+    }
+
+    let folderURL = URL(fileURLWithPath: args[1])
+    let outputURL = URL(fileURLWithPath: args[2])
+
+    let fm = FileManager.default
+    let allowedExt = Set(["png", "jpg", "jpeg", "heic"])
+
+    guard let items = try? fm.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil) else {
+        print("Failed to read folder: \(folderURL.path)")
+        exit(1)
+    }
+
+    let request = VNDetectHumanBodyPoseRequest()
+    var result: [String: [String: Double]] = [:]
+    var failures: [String] = []
+
+    for url in items {
+        guard allowedExt.contains(url.pathExtension.lowercased()) else { continue }
+        let poseName = url.deletingPathExtension().lastPathComponent
+        guard let cgImage = loadCGImage(url: url) else {
+            failures.append(poseName)
+            continue
+        }
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, orientation: .up, options: [:])
+        do {
+            try handler.perform([request])
+            guard let observation = request.results?.first else {
+                failures.append(poseName)
+                continue
+            }
+            if let angles = PoseAngleScorer.angles(from: observation) {
+                result[poseName] = angles
+            } else {
+                failures.append(poseName)
+            }
+        } catch {
+            failures.append(poseName)
+        }
+    }
+
+    let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: outputURL)
+
+    print("Wrote: \(outputURL.path)")
+    if !failures.isEmpty {
+        print("Failed to extract pose from: \(failures.joined(separator: ", "))")
+    }
+}
+
+do {
+    try run()
+} catch {
+    print("Failed: \(error)")
+    exit(1)
+}
+
+func loadCGImage(url: URL) -> CGImage? {
+    guard let image = NSImage(contentsOf: url) else { return nil }
+    var rect = CGRect(origin: .zero, size: image.size)
+    return image.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+}
+
+enum PoseAngleScorer {
+    static func angles(from observation: VNHumanBodyPoseObservation, minConfidence: VNConfidence = 0.3) -> [String: Double]? {
+        guard let points = try? observation.recognizedPoints(.all) else { return nil }
+
+        func point(_ key: VNHumanBodyPoseObservation.JointName) -> CGPoint? {
+            guard let point = points[key], point.confidence >= minConfidence else { return nil }
+            return CGPoint(x: point.x, y: point.y)
+        }
+
+        func angle(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> Double {
+            let ab = CGVector(dx: a.x - b.x, dy: a.y - b.y)
+            let cb = CGVector(dx: c.x - b.x, dy: c.y - b.y)
+            let dot = ab.dx * cb.dx + ab.dy * cb.dy
+            let mag = hypot(ab.dx, ab.dy) * hypot(cb.dx, cb.dy)
+            guard mag > 0 else { return 0 }
+            let cosValue = max(-1.0, min(1.0, dot / mag))
+            return acos(cosValue) * 180.0 / Double.pi
+        }
+
+        var values: [String: Double] = [:]
+
+        if let shoulder = point(.leftShoulder),
+           let elbow = point(.leftElbow),
+           let wrist = point(.leftWrist) {
+            values["leftElbow"] = angle(shoulder, elbow, wrist)
+        }
+        if let shoulder = point(.rightShoulder),
+           let elbow = point(.rightElbow),
+           let wrist = point(.rightWrist) {
+            values["rightElbow"] = angle(shoulder, elbow, wrist)
+        }
+        if let hip = point(.leftHip),
+           let knee = point(.leftKnee),
+           let ankle = point(.leftAnkle) {
+            values["leftKnee"] = angle(hip, knee, ankle)
+        }
+        if let hip = point(.rightHip),
+           let knee = point(.rightKnee),
+           let ankle = point(.rightAnkle) {
+            values["rightKnee"] = angle(hip, knee, ankle)
+        }
+        if let elbow = point(.leftElbow),
+           let shoulder = point(.leftShoulder),
+           let hip = point(.leftHip) {
+            values["leftShoulder"] = angle(elbow, shoulder, hip)
+        }
+        if let elbow = point(.rightElbow),
+           let shoulder = point(.rightShoulder),
+           let hip = point(.rightHip) {
+            values["rightShoulder"] = angle(elbow, shoulder, hip)
+        }
+        if let shoulder = point(.leftShoulder),
+           let hip = point(.leftHip),
+           let knee = point(.leftKnee) {
+            values["leftHip"] = angle(shoulder, hip, knee)
+        }
+        if let shoulder = point(.rightShoulder),
+           let hip = point(.rightHip),
+           let knee = point(.rightKnee) {
+            values["rightHip"] = angle(shoulder, hip, knee)
+        }
+
+        return values.isEmpty ? nil : values
+    }
+}
+#endif

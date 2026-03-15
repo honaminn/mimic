@@ -28,6 +28,7 @@ struct ShootingStartView: View {
             ModelPoseView(selectedTags: selectedTags, totalShots: totalShots, currentShot: 1)
         }
         .onAppear {
+            SessionPhotoStore.startNewSession()
             guard !navigateToModelPose else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 navigateToModelPose = true

@@ -5,7 +5,7 @@ enum PoseReferenceStore {
     private static var didLoad = false
 
     static func angles(for poseName: String) -> PoseAngles? {
-        if !didLoad {
+        if !didLoad || cached.isEmpty {
             didLoad = true
             cached = loadFromBundle()
         }
@@ -13,9 +13,11 @@ enum PoseReferenceStore {
     }
 
     private static func loadFromBundle() -> [String: PoseAngles] {
-        guard let url = Bundle.main.url(forResource: "PoseReferences", withExtension: "json") else {
-            return [:]
-        }
+        let url = Bundle.main.url(forResource: "PoseReferences", withExtension: "json")
+            ?? Bundle.main.url(forResource: "PoseReferences 2", withExtension: "json")
+            ?? Bundle.main.urls(forResourcesWithExtension: "json", subdirectory: nil)?
+                .first(where: { $0.lastPathComponent.lowercased().contains("posereferences") })
+        guard let url else { return [:] }
         guard let data = try? Data(contentsOf: url) else { return [:] }
         guard let raw = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Double]] else {
             return [:]

@@ -2,9 +2,11 @@ import Foundation
 
 enum SessionPhotoStore {
     private static let photosKey = "mimic.currentSessionPhotos"
+    private static let sessionIdKey = "mimic.currentSessionId"
 
     static func startNewSession() {
         UserDefaults.standard.set([], forKey: photosKey)
+        UserDefaults.standard.set(UUID().uuidString, forKey: sessionIdKey)
     }
 
     static func appendPhoto(_ url: URL) {
@@ -16,6 +18,15 @@ enum SessionPhotoStore {
     static func loadPhotos() -> [URL] {
         let list = UserDefaults.standard.stringArray(forKey: photosKey) ?? []
         return list.map { URL(fileURLWithPath: $0) }
+    }
+
+    static func currentSessionId() -> String {
+        if let id = UserDefaults.standard.string(forKey: sessionIdKey) {
+            return id
+        }
+        let newId = UUID().uuidString
+        UserDefaults.standard.set(newId, forKey: sessionIdKey)
+        return newId
     }
 
     static func loadMostRecent(limit: Int) -> [URL] {

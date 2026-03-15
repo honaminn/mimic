@@ -22,6 +22,10 @@ struct ShootingMainView: View {
     @State private var latestCapturedImageForShow: UIImage?
     @State private var showExitAlert = false
     @State private var poseScore: Double?
+    @State private var poseStatus: String?
+    @State private var lastPoseScore: Double?
+    @State private var lastPoseUpdate: Date?
+    @State private var smoothedPoseScore: Double?
     @Environment(\.dismiss) private var dismiss
     private let autoCaptureDelay: TimeInterval = 10.0
     private let autoCaptureTicker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
@@ -56,7 +60,7 @@ struct ShootingMainView: View {
                 }
                 .padding()
             } else {
-                CameraPreview(session: camera.session)
+                CameraPreview(camera: camera)
                     .ignoresSafeArea()
                     .overlay(alignment: .bottom) {
                         bottomOverlay
@@ -117,23 +121,42 @@ struct ShootingMainView: View {
             }
         }
         .onReceive(camera.$capturedImage.compactMap { $0 }) { image in
+            let finalImage = camera.finalizeCapturedImage(image)
             shotNumber = min(shotNumber + 1, totalShots)
             isAutoCaptureActive = false
             countdownValue = nil
-            saveImageToDeviceLibrary(image)
-            saveImageToAppStorage(image)
-            latestCapturedImageForShow = image
+            saveImageToDeviceLibrary(finalImage)
+            saveImageToAppStorage(finalImage)
+            latestCapturedImageForShow = finalImage
             navigateToShootingShow = true
         }
         .onReceive(camera.$currentPoseAngles) { angles in
+            let now = Date()
             guard let angles else {
-                poseScore = nil
+                if let lastPoseUpdate, now.timeIntervalSince(lastPoseUpdate) < 2.0 {
+                    poseScore = lastPoseScore
+                    poseStatus = nil
+                } else {
+                    poseScore = 0
+                    poseStatus = "No Pose"
+                }
                 return
             }
             if let reference = PoseReferenceStore.angles(for: referencePose.name) {
-                poseScore = PoseAngleScorer.score(current: angles, reference: reference)
+                let score = PoseAngleScorer.score(current: angles, reference: reference)
+                let alpha = 0.2
+                if let current = smoothedPoseScore {
+                    smoothedPoseScore = current * (1 - alpha) + score * alpha
+                } else {
+                    smoothedPoseScore = score
+                }
+                poseScore = smoothedPoseScore
+                lastPoseScore = score
+                lastPoseUpdate = now
+                poseStatus = nil
             } else {
-                poseScore = nil
+                poseScore = 0
+                poseStatus = "No Ref"
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
@@ -157,10 +180,7 @@ struct ShootingMainView: View {
                 Button {
                     showExitAlert = true
                 } label: {
-                    ZStack {
-                        Circle()
-                            .fill(.white.opacity(0.9))
-                            .frame(width: 56, height: 56)
+                    topPill {
                         Image(systemName: "xmark")
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(.black)
@@ -168,10 +188,7 @@ struct ShootingMainView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
-                ZStack {
-                    Circle()
-                        .fill(.white.opacity(0.9))
-                        .frame(width: 56, height: 56)
+                topPill {
                     Text("\(shotNumber)/\(totalShots)")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundStyle(.black)
@@ -189,9 +206,7 @@ struct ShootingMainView: View {
     private var bottomOverlay: some View {
         HStack(alignment: .bottom, spacing: 20) {
             VStack(spacing: 8) {
-                Image(systemName: referencePose.symbol)
-                    .resizable()
-                    .scaledToFit()
+                poseImage(for: referencePose)
                     .frame(width: 52, height: 52)
                 Text("おてほん")
                     .font(.system(size: 22, weight: .bold))
@@ -204,17 +219,24 @@ struct ShootingMainView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             ZStack {
+                let start: CGFloat = 0.15
+                let span: CGFloat = 0.80
+                let progress = CGFloat(min(max((poseScore ?? 0) / 100.0, 0), 1))
+                let end = start + span * progress
+
                 Circle()
-                    .trim(from: 0.15, to: 0.95)
-                    .stroke(Color(red: 0.96, green: 0.82, blue: 0.39), style: StrokeStyle(lineWidth: 22, lineCap: .round))
+                    .trim(from: start, to: start + span)
+                    .stroke(Color(red: 0.88, green: 0.86, blue: 0.82), style: StrokeStyle(lineWidth: 22, lineCap: .round))
                     .frame(width: 168, height: 168)
                     .rotationEffect(.degrees(-90))
 
                 Circle()
-                    .trim(from: 0.30, to: 0.82)
-                    .stroke(Color(red: 0.88, green: 0.86, blue: 0.82), style: StrokeStyle(lineWidth: 22, lineCap: .round))
+                    .trim(from: start, to: end)
+                    .stroke(Color(red: 0.96, green: 0.82, blue: 0.39), style: StrokeStyle(lineWidth: 22, lineCap: .round))
                     .frame(width: 168, height: 168)
                     .rotationEffect(.degrees(-90))
+                    .opacity(poseScore == nil ? 0.2 : 1.0)
+                    .animation(.easeOut(duration: 0.2), value: poseScore)
 
                 VStack(spacing: 2) {
                     Text("一致度")
@@ -234,11 +256,40 @@ struct ShootingMainView: View {
                                 .foregroundStyle(Color.orange)
                         }
                     }
+                    if let poseStatus {
+                        Text(poseStatus)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
         .padding(.horizontal, 24)
         .frame(maxWidth: .infinity)
+    }
+
+    private func topPill<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ZStack {
+            Capsule()
+                .fill(Color.white.opacity(0.9))
+                .frame(width: 72, height: 44)
+                .shadow(color: .black.opacity(0.08), radius: 10, x: 0, y: 6)
+            content()
+        }
+    }
+
+    private func poseImage(for pose: PoseGuide) -> some View {
+        Group {
+            if let imageName = pose.imageName {
+                Image(imageName)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: pose.symbol)
+                    .resizable()
+                    .scaledToFit()
+            }
+        }
     }
 
     private func scheduleAutoCaptureIfNeeded() {
@@ -290,7 +341,9 @@ struct ShootingMainView: View {
         }
         do {
             let folder = try AppPhotoStore.ensureFolder()
-            let filename = "mimic_\(UUID().uuidString).jpg"
+            let sessionId = SessionPhotoStore.currentSessionId()
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let filename = "mimic_\(sessionId)_\(timestamp)_\(UUID().uuidString).jpg"
             let url = folder.appendingPathComponent(filename)
             try data.write(to: url, options: .atomic)
             SessionPhotoStore.appendPhoto(url)
@@ -318,6 +371,7 @@ final class CameraSessionModel: NSObject, ObservableObject {
     @Published var errorMessage: String?
     @Published var capturedImage: UIImage?
     @Published @MainActor var currentPoseAngles: PoseAngles?
+    weak var previewLayer: AVCaptureVideoPreviewLayer?
 
     private let queue = DispatchQueue(label: "camera.session.queue")
     private let visionQueue = DispatchQueue(label: "camera.vision.queue")
@@ -329,11 +383,30 @@ final class CameraSessionModel: NSObject, ObservableObject {
     nonisolated(unsafe) private let poseRequest = VNDetectHumanBodyPoseRequest()
     private lazy var photoCaptureDelegate = PhotoCaptureDelegate { [weak self] image in
         DispatchQueue.main.async {
-            self?.capturedImage = image
-            if image == nil {
-                self?.errorMessage = "撮影に失敗しました"
+            guard let self else { return }
+            if let image {
+                let normalized = image.normalizedOrientation()
+                self.capturedImage = cropToAspect(normalized) ?? normalized
+            } else {
+                self.capturedImage = nil
+                self.errorMessage = "撮影に失敗しました"
             }
         }
+    }
+
+    func updatePreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+        previewLayer = layer
+        layer.videoGravity = .resizeAspectFill
+    }
+
+    func finalizeCapturedImage(_ image: UIImage) -> UIImage {
+        let normalized = image.normalizedOrientation()
+        return cropToAspect(normalized) ?? normalized
+    }
+
+    private func cropToAspect(_ image: UIImage) -> UIImage? {
+        let ratio = CGFloat(9.0 / 16.0)
+        return image.croppedToAspectRatio(ratio)
     }
 
     override init() {
@@ -360,7 +433,7 @@ final class CameraSessionModel: NSObject, ObservableObject {
                 if connection.isVideoRotationAngleSupported(90) {
                     connection.videoRotationAngle = 90
                 }
-                connection.isVideoMirrored = false
+                connection.isVideoMirrored = true
             }
             self.photoOutput.capturePhoto(with: settings, delegate: self.photoCaptureDelegate)
         }
@@ -458,6 +531,9 @@ final class CameraSessionModel: NSObject, ObservableObject {
 
         if session.canAddOutput(videoOutput) {
             videoOutput.alwaysDiscardsLateVideoFrames = true
+            videoOutput.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
             videoOutput.setSampleBufferDelegate(self, queue: visionQueue)
             session.addOutput(videoOutput)
         }
@@ -521,26 +597,58 @@ private extension UIImage {
         if imageOrientation == .up {
             return self
         }
-        UIGraphicsBeginImageContextWithOptions(size, false, scale)
-        draw(in: CGRect(origin: .zero, size: size))
-        let normalized = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return normalized ?? self
+        let targetSize: CGSize
+        switch imageOrientation {
+        case .left, .right, .leftMirrored, .rightMirrored:
+            targetSize = CGSize(width: size.height, height: size.width)
+        default:
+            targetSize = size
+        }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        let normalized = renderer.image { _ in
+            draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        return normalized
+    }
+
+    func croppedToAspectRatio(_ targetRatio: CGFloat) -> UIImage {
+        let imageSize = size
+        guard imageSize.width > 0, imageSize.height > 0 else { return self }
+
+        let currentRatio = imageSize.height / imageSize.width
+        var cropRect = CGRect(origin: .zero, size: imageSize)
+
+        if currentRatio > targetRatio {
+            let newHeight = imageSize.width * targetRatio
+            let y = (imageSize.height - newHeight) / 2
+            cropRect = CGRect(x: 0, y: y, width: imageSize.width, height: newHeight)
+        } else if currentRatio < targetRatio {
+            let newWidth = imageSize.height / targetRatio
+            let x = (imageSize.width - newWidth) / 2
+            cropRect = CGRect(x: x, y: 0, width: newWidth, height: imageSize.height)
+        }
+
+        guard let cgImage = cgImage?.cropping(to: cropRect) else { return self }
+        return UIImage(cgImage: cgImage, scale: scale, orientation: imageOrientation)
     }
 }
 
 struct CameraPreview: UIViewRepresentable {
-    let session: AVCaptureSession
+    let camera: CameraSessionModel
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.videoGravity = .resizeAspectFill
-        view.previewLayer.session = session
+        view.previewLayer.session = camera.session
+        camera.updatePreviewLayer(view.previewLayer)
         return view
     }
 
     func updateUIView(_ uiView: PreviewView, context: Context) {
-        uiView.previewLayer.session = session
+        uiView.previewLayer.session = camera.session
+        camera.updatePreviewLayer(uiView.previewLayer)
     }
 }
 

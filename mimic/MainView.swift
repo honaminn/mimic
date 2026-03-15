@@ -12,9 +12,7 @@ struct ContentView: View {
     @State private var selectedTab = 1
     var body: some View {
         TabView(selection: $selectedTab) {
-            Tab("Pose", systemImage: "person.crop.square", value:0){
-                PoseView()
-            }
+            
             Tab("Shoot", systemImage: "camera", value:1){
                 SettingView()
             }

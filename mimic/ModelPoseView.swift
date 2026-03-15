@@ -33,9 +33,7 @@ struct ModelPoseView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: selectedPose.symbol)
-                .resizable()
-                .scaledToFit()
+            poseImage(for: selectedPose)
                 .frame(width: 180, height: 180)
                 .padding(24)
                 .background(Color.white.opacity(0.8))
@@ -92,6 +90,20 @@ struct ModelPoseView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .mimicPopToRoot)) { _ in
             dismiss()
+        }
+    }
+
+    private func poseImage(for pose: PoseGuide) -> some View {
+        Group {
+            if let imageName = pose.imageName {
+                Image(imageName)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: pose.symbol)
+                    .resizable()
+                    .scaledToFit()
+            }
         }
     }
 }
